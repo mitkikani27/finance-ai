@@ -1,0 +1,76 @@
+### Auth endpoints
+
+# Register a new user
+POST http://localhost:8000/auth/register
+Content-Type: application/json
+
+{
+  "name": "John Doe",
+  "email": "johndoe@example.com",
+  "password": "strongpassword123",
+  "phone": "+1234567890"
+}
+
+###
+
+# Login
+# @name login
+POST http://localhost:8000/auth/login
+Content-Type: application/x-www-form-urlencoded
+
+username=johndoe@example.com&password=strongpassword123
+
+###
+
+# Variables base on login response
+@token = {{login.response.body.access_token}}
+
+### Expenses endpoints
+
+# Get all expenses (will only return for the authenticated user)
+GET http://localhost:8000/expenses/
+Authorization: Bearer {{token}}
+
+###
+
+# Create a new expense
+# @name create_expense
+POST http://localhost:8000/expenses/
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "Swiggy Dinner",
+  "amount": 450.00,
+  "category": "Food",
+  "merchant_name": "Swiggy",
+  "payment_method": "UPI",
+  "source": "manual",
+  "notes": "Late night order"
+}
+
+###
+
+@expense_id = {{create_expense.response.body._id}}
+
+# Get single expense
+GET http://localhost:8000/expenses/{{expense_id}}
+Authorization: Bearer {{token}}
+
+###
+
+# Update single expense
+PUT http://localhost:8000/expenses/{{expense_id}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+    "amount": 500.00,
+    "title": "Swiggy Dinner Updated"
+}
+
+###
+
+# Delete expense
+DELETE http://localhost:8000/expenses/{{expense_id}}
+Authorization: Bearer {{token}}

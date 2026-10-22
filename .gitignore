@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.db
+*.sqlite3
+
+# Node
+node_modules/
+frontend/dist/
+npm-debug.log*
+
+# Env & secrets
+.env
+.env.local
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# OCR receipt images (user data)
+backend/uploads/
+backend/sent_emails/
