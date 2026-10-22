@@ -8,7 +8,12 @@ MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec
 
 
 def month_key(d) -> str:
-    d = d.date() if isinstance(d, datetime) else d
+    if not d:
+        return ""
+    if isinstance(d, str):
+        return d[:7]
+    if isinstance(d, datetime):
+        d = d.date()
     return f"{d.year:04d}-{d.month:02d}"
 
 

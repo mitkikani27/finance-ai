@@ -53,14 +53,23 @@ async def upload_receipt(file: UploadFile = File(...), user: models.User = Depen
     if "error" in result:
         raise HTTPException(503, result["error"])
 
-    # AI Module 4: predict category from the detected shop name
-    ai = ai_predict(result.get("shop") or "receipt") if result.get("shop") else None
-    result["ai_category"] = ai["category"] if ai else None
+    # AI Category: prioritize Gemini Vision category, else use expense classifier
+    if not result.get("category"):
+        ai = ai_predict(result.get("shop") or "receipt") if result.get("shop") else None
+        result["category"] = ai["category"] if ai else "Shopping"
+    result["ai_category"] = result["category"]
+
+    rdate_obj = None
+    if result.get("date"):
+        try:
+            rdate_obj = datetime.strptime(result["date"][:10], "%Y-%m-%d").date()
+        except Exception:
+            rdate_obj = datetime.now().date()
 
     rec = models.OCRReceipt(
-        user_id=user.id, filename=file.filename or "", shop=result.get("shop", ""),
+        user_id=user.id, filename=file.filename or "", shop=result.get("shop", "Receipt"),
         amount=result.get("amount", 0.0), tax=result.get("tax", 0.0),
-        rdate=datetime.strptime(result["date"], "%Y-%m-%d").date() if result.get("date") else None,
+        rdate=rdate_obj,
         raw_text=result.get("raw_text_preview", ""),
     )
     db.add(rec)
@@ -131,14 +140,16 @@ def confirm(receipt_id: int, body: dict, user: models.User = Depends(authlib.get
     except ValueError:
         raise HTTPException(400, "date must be YYYY-MM-DD")
     category = body.get("category") or rec.shop or "Shopping"
-    desc = body.get("description") or f"Receipt: {rec.shop or 'unknown shop'}"
+    payment_mode = body.get("payment_mode") or "Card"
+    shop = body.get("shop") or rec.shop or "Shop"
+    desc = body.get("description") or f"Receipt: {shop}"
 
     exp = models.Expense(user_id=user.id, category=category, description=desc,
-                         amount=amount, date=d, payment_mode="Card", ai_categorized=True)
+                         amount=amount, date=d, payment_mode=payment_mode, ai_categorized=True)
     db.add(exp)
     db.flush()
     rec.expense_id = exp.id
-    rec.amount, rec.shop = amount, body.get("description") or rec.shop
+    rec.amount, rec.shop = amount, shop
     db.commit()
     return {"expense_id": exp.id, "category": category, "amount": amount,
             "date": d.isoformat(), "month": d.strftime("%Y-%m")}
