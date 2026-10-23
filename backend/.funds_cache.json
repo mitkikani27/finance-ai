@@ -1,0 +1,126 @@
+{
+  "funds": [
+    {
+      "symbol": "MAFANG",
+      "name": "NYSE FANG+ ETF (USA)",
+      "category": "International \u2013 US Tech",
+      "price": 244.39,
+      "day_chg": -7.96,
+      "r1m": 0.4,
+      "r6m": 39.5,
+      "r1y": 44.3,
+      "verdict": "Great \ud83d\udd25"
+    },
+    {
+      "symbol": "SILVERBEES",
+      "name": "Silver ETF",
+      "category": "Commodity \u2013 Silver",
+      "price": 183.4,
+      "day_chg": -5.98,
+      "r1m": -17.5,
+      "r6m": -22.7,
+      "r1y": 29.2,
+      "verdict": "Great \ud83d\udd25"
+    },
+    {
+      "symbol": "MON100",
+      "name": "Nasdaq 100 ETF (USA)",
+      "category": "International \u2013 US Tech",
+      "price": 286.61,
+      "day_chg": -6.76,
+      "r1m": -13.2,
+      "r6m": -0.9,
+      "r1y": 19.2,
+      "verdict": "Good \u2705"
+    },
+    {
+      "symbol": "GOLDBEES",
+      "name": "Gold ETF",
+      "category": "Commodity \u2013 Gold",
+      "price": 115.74,
+      "day_chg": -2.02,
+      "r1m": -7.8,
+      "r6m": -7.6,
+      "r1y": 13.8,
+      "verdict": "Good \u2705"
+    },
+    {
+      "symbol": "PSUBNKBEES",
+      "name": "PSU Bank ETF",
+      "category": "Sector \u2013 PSU Bank",
+      "price": 90.05,
+      "day_chg": -1.8,
+      "r1m": -2.9,
+      "r6m": -10.1,
+      "r1y": 2.6,
+      "verdict": "Flat \u2796"
+    },
+    {
+      "symbol": "LIQUIDBEES",
+      "name": "Liquid ETF",
+      "category": "Debt \u2013 Money Market",
+      "price": 1000.01,
+      "day_chg": 0.0,
+      "r1m": 0.0,
+      "r6m": 0.0,
+      "r1y": 0.0,
+      "verdict": "Flat \u2796"
+    },
+    {
+      "symbol": "JUNIORBEES",
+      "name": "Nifty Next 50 ETF",
+      "category": "Index \u2013 Large Cap",
+      "price": 710.5,
+      "day_chg": -2.76,
+      "r1m": -9.2,
+      "r6m": -6.8,
+      "r1y": -4.8,
+      "verdict": "Negative \u26a0\ufe0f"
+    },
+    {
+      "symbol": "BANKBEES",
+      "name": "Nifty Bank ETF",
+      "category": "Sector \u2013 Banking",
+      "price": 563.64,
+      "day_chg": -0.87,
+      "r1m": -3.7,
+      "r6m": -4.6,
+      "r1y": -5.8,
+      "verdict": "Negative \u26a0\ufe0f"
+    },
+    {
+      "symbol": "MID150BEES",
+      "name": "Nifty Midcap 150 ETF",
+      "category": "Index \u2013 Mid Cap",
+      "price": 212.88,
+      "day_chg": -1.92,
+      "r1m": -8.8,
+      "r6m": -6.5,
+      "r1y": -5.9,
+      "verdict": "Negative \u26a0\ufe0f"
+    },
+    {
+      "symbol": "ITBEES",
+      "name": "Nifty IT ETF",
+      "category": "Sector \u2013 IT",
+      "price": 35.8,
+      "day_chg": -0.42,
+      "r1m": 11.5,
+      "r6m": 2.4,
+      "r1y": -9.2,
+      "verdict": "Negative \u26a0\ufe0f"
+    },
+    {
+      "symbol": "NIFTYBEES",
+      "name": "Nippon Nifty 50 ETF",
+      "category": "Index \u2013 Large Cap",
+      "price": 257.5,
+      "day_chg": -0.8,
+      "r1m": -3.8,
+      "r6m": -7.3,
+      "r1y": -11.9,
+      "verdict": "Negative \u26a0\ufe0f"
+    }
+  ],
+  "disclaimer": "Past returns are not a guarantee of future performance. Educational data \u2014 direct mutual funds par brokerage/expense ratio check karein."
+}

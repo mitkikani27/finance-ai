@@ -184,14 +184,12 @@ def investment_suggestions(income, expense, emi, emergency_fund, risk="balanced"
     return base
 
 
-def project_growth(investments, years=10, monthly=0.0):
-    """Month-by-month projected portfolio value for the growth chart.
+def project_growth(investments, years=10, monthly=0.0, custom_rate=None):
+    """Month-by-month projected portfolio value, invested principal, and returns gain.
 
     `monthly` = optional what-if extra SIP added on top of the instruments'
-    own monthly inflows, so the chart reacts when the user types an amount.
-    Compounding uses ONE portfolio-weighted monthly rate (blending every
-    instrument's rate into the total value — sequential per-instrument
-    multiplication double-counted growth).
+    own monthly inflows.
+    `custom_rate` = optional user-selected annual return rate (%) to override default.
     """
     total_value = 0.0
     weighted = 0.0
@@ -202,10 +200,46 @@ def project_growth(investments, years=10, monthly=0.0):
         total_value += amt
         weighted += amt * r
         flows += inv.get("monthly_inflow") or 0
-    rate = (weighted / total_value) if total_value > 0 else 0.12 / 12
-    points = [{"month": 0, "value": round(total_value)}]
+
+    if custom_rate is not None and float(custom_rate) > 0:
+        rate = (float(custom_rate) / 100) / 12
+        effective_annual_rate = round(float(custom_rate), 1)
+    else:
+        rate = (weighted / total_value) if total_value > 0 else 0.12 / 12
+        effective_annual_rate = round(rate * 12 * 100, 1)
+
+    points = [{
+        "month": 0,
+        "value": round(total_value),
+        "invested": round(total_value),
+        "gain": 0
+    }]
     value = total_value
     for m in range(1, years * 12 + 1):
         value = value * (1 + rate) + flows + monthly
-        points.append({"month": m, "value": round(value)})
-    return {"current_value": round(total_value), "points": points[::6] + [points[-1]]}
+        invested = total_value + (flows + monthly) * m
+        gain = max(0.0, value - invested)
+        points.append({
+            "month": m,
+            "value": round(value),
+            "invested": round(invested),
+            "gain": round(gain)
+        })
+
+    # Return sampled points (every 6 months + last month)
+    sampled = points[::6]
+    if not sampled or sampled[-1]["month"] != points[-1]["month"]:
+        sampled.append(points[-1])
+
+    final_invested = round(total_value + (flows + monthly) * 12 * years)
+    final_value = round(value)
+    final_gain = max(0, final_value - final_invested)
+    return {
+        "current_value": round(total_value),
+        "annual_rate": effective_annual_rate,
+        "total_invested": final_invested,
+        "total_gain": final_gain,
+        "final_value": final_value,
+        "return_multiplier": round(final_value / max(1, final_invested), 2),
+        "points": sampled
+    }

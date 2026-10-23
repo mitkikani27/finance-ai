@@ -325,6 +325,91 @@ def _add_expense_action(db, user: models.User, q: str, question: str) -> str | N
     )
 
 
+def _add_budget_action(db, user: models.User, q: str, question: str) -> str | None:
+    budget_pat = r"(budget.*(set|add|banao|rakho|karo)|(set|add|banao|rakho).*budget)"
+    if not re.search(budget_pat, q):
+        return None
+    amount = _extract_amount(q)
+    if not amount or amount <= 0:
+        return None
+    category = _extract_expense_category(q)
+    if category == "General":
+        m = re.search(r"(?:for|ka|ke liye)\s+([a-zA-Z]+)", q)
+        if m:
+            category = m.group(1).title()
+    exists = db.query(models.Budget).filter(
+        models.Budget.user_id == user.id, models.Budget.category == category
+    ).first()
+    if exists:
+        exists.monthly_limit = amount
+        exists.amount = amount
+    else:
+        db.add(models.Budget(user_id=user.id, category=category, monthly_limit=amount, amount=amount))
+    db.commit()
+    return (
+        f"🎯 **Budget Set Ho Gaya!** {category} category ke liye monthly limit **{inr(amount)}** successfully set kar diya gaya hai. 🎉\n\n"
+        f"Aap Budget page (`/budget`) par jaakar tracking aur spending pace dekh sakte ho."
+    )
+
+
+def _add_investment_action(db, user: models.User, q: str, question: str) -> str | None:
+    invest_pat = r"(invest.*(add|karo|kiya|start|shuru|record)|(add|start|shuru|record).*invest|sip.*(add|start|shuru|karo|record))"
+    if not re.search(invest_pat, q):
+        return None
+    amount = _extract_amount(q)
+    if not amount or amount <= 0:
+        return None
+
+    inv_type = "Mutual Fund"
+    if "stock" in q or "share" in q: inv_type = "Stocks"
+    elif "gold" in q: inv_type = "Gold"
+    elif "fd" in q or "fixed deposit" in q: inv_type = "Fixed Deposit"
+    elif "crypto" in q: inv_type = "Crypto"
+    elif "ppf" in q: inv_type = "PPF"
+
+    name = f"{inv_type} Investment"
+    if "nifty" in q: name = "Nifty 50 Index Fund"
+    elif "hdfc" in q: name = "HDFC Bluechip Fund"
+    elif "tata" in q: name = "Tata Digital India Fund"
+
+    today_obj = date.today()
+    rec = models.Investment(
+        user_id=user.id,
+        name=name,
+        inv_type=inv_type,
+        amount=amount,
+        monthly_inflow=amount if "sip" in q else 0,
+        expected_return=12.0,
+        start_date=today_obj,
+        note=f"Added via AI chat: {question[:80]}"
+    )
+    db.add(rec)
+    db.commit()
+    return (
+        f"📈 **Investment Record Added!** {inr(amount)} in **{name}** ({inv_type}) database me persist ho gaya hai. 🚀\n\n"
+        f"Investments page (`/investments`) par portfolio growth aur compounding simulation dekh sakte ho."
+    )
+
+
+def _execute_sip_action(db, user: models.User, q: str, question: str) -> str | None:
+    if not re.search(r"(sip.*(debit|run|kat|katao|execute|kaato)|(run|debit|kat|katao|execute|kaato).*sip)", q):
+        return None
+    from routers.investments import execute_sip
+    res = execute_sip(body=None, user=user, db=db)
+    if res.get("count", 0) > 0:
+        names = ", ".join(e["name"] for e in res["executed"])
+        return (
+            f"🔄 **SIP Auto-Debit Executed!** Total {inr(res['total_debited'])} SIP installment ({names}) "
+            f"aapke portfolio holdings me add kar di gayi hai, aur is mahine ki income/balance me se "
+            f"(Investment expense ke roop me) deduct kar di gayi hai! 📈\n\n"
+            f"Aap Investments aur Expenses page par updated balance verify kar sakte ho."
+        )
+    return (
+        f"ℹ️ **Status:** Is mahine ({res.get('month')}) ke liye aapki saari SIPs already successfully debit ho chuki hain! "
+        f"Next month auto-debit trigger hoga."
+    )
+
+
 # ── Smart Financial Advisor ───────────────────────────────────────────────────
 
 def smart_advice(db, user: models.User, question: str) -> str:
@@ -364,6 +449,13 @@ def answer(db, user: models.User, question: str) -> str:
     import market as market_svc
     q = question.lower().strip()
 
+    # Destructive action safeguard
+    if re.search(r"(delete|remove|clear|drop|truncate|hatao|mitao)\s+(all|sab|everything|poora|database|data|ledger)", q):
+        return (
+            "🛑 **Action Blocked for Security:** FinMate AI ledger deletion protection ke antargat bulk ya permanent data delete nahi kar sakta.\n\n"
+            "Kripya individual records ko unke respective page (Expenses, Budget, ya Income) par jaakar trash icon se delete karein."
+        )
+
     # 1. Action Check: Add Income
     income_action = _add_income_action(db, user, q, question)
     if income_action:
@@ -373,6 +465,21 @@ def answer(db, user: models.User, question: str) -> str:
     expense_action = _add_expense_action(db, user, q, question)
     if expense_action:
         return expense_action
+
+    # 3. Action Check: Set/Update Budget
+    budget_action = _add_budget_action(db, user, q, question)
+    if budget_action:
+        return budget_action
+
+    # 4. Action Check: Add Investment
+    investment_action = _add_investment_action(db, user, q, question)
+    if investment_action:
+        return investment_action
+
+    # 5. Action Check: Run / Execute Monthly SIP
+    sip_action = _execute_sip_action(db, user, q, question)
+    if sip_action:
+        return sip_action
 
     # 3. Context Builder
     ctx = build_context(db, user)

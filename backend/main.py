@@ -47,6 +47,8 @@ _PUBLIC_EXACT = {
     "/api/auth/login/otp/request",
     "/api/auth/login/otp/verify",
     "/api/auth/clerk",
+    "/api/health",
+    "/api/health/db",
 }
 
 
@@ -100,3 +102,15 @@ app.include_router(email_router)
 @app.get("/")
 def read_root():
     return {"message": "Welcome to FinMate AI API"}
+
+
+@app.get("/api/health")
+def api_health():
+    import database
+    return {"status": "ok", "db_mode": database.mode()}
+
+
+@app.get("/api/health/db")
+def api_health_db():
+    import database
+    return database.db_info()

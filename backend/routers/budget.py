@@ -20,11 +20,23 @@ router = APIRouter(prefix="/api/budget", tags=["budget"])
 
 class BudgetIn(BaseModel):
     category: str
-    monthly_limit: float
+    monthly_limit: float | None = None
+    amount: float | None = None
+
+    @property
+    def effective_limit(self) -> float:
+        val = self.monthly_limit if self.monthly_limit is not None else self.amount
+        return float(val or 0.0)
 
 
 class BudgetUpdate(BaseModel):
-    monthly_limit: float
+    monthly_limit: float | None = None
+    amount: float | None = None
+
+    @property
+    def effective_limit(self) -> float:
+        val = self.monthly_limit if self.monthly_limit is not None else self.amount
+        return float(val or 0.0)
 
 
 class PresetIn(BaseModel):
@@ -122,17 +134,19 @@ def get_budgets(user: models.User = Depends(authlib.get_current_user), db: Sessi
 
 @router.post("")
 def add_or_update_budget(body: BudgetIn, user: models.User = Depends(authlib.get_current_user), db: Session = Depends(get_db)):
-    if body.monthly_limit <= 0:
+    limit = body.effective_limit
+    if limit <= 0:
         raise HTTPException(400, "Monthly limit must be greater than 0")
     exists = db.query(models.Budget).filter(
         models.Budget.user_id == user.id, models.Budget.category == body.category
     ).first()
     if exists:
-        exists.monthly_limit = round(body.monthly_limit, 2)
+        exists.monthly_limit = round(limit, 2)
+        exists.amount = round(limit, 2)
     else:
-        db.add(models.Budget(user_id=user.id, category=body.category, monthly_limit=round(body.monthly_limit, 2)))
+        db.add(models.Budget(user_id=user.id, category=body.category, monthly_limit=round(limit, 2), amount=round(limit, 2)))
     db.commit()
-    return {"ok": True, "category": body.category, "monthly_limit": body.monthly_limit}
+    return {"ok": True, "category": body.category, "monthly_limit": limit, "amount": limit}
 
 
 @router.put("/{budget_id}")
@@ -140,11 +154,13 @@ def update_budget(budget_id: int, body: BudgetUpdate, user: models.User = Depend
     b = db.get(models.Budget, budget_id)
     if not b or b.user_id != user.id:
         raise HTTPException(404, "Budget not found")
-    if body.monthly_limit <= 0:
+    limit = body.effective_limit
+    if limit <= 0:
         raise HTTPException(400, "Monthly limit must be greater than 0")
-    b.monthly_limit = round(body.monthly_limit, 2)
+    b.monthly_limit = round(limit, 2)
+    b.amount = round(limit, 2)
     db.commit()
-    return {"ok": True, "id": b.id, "monthly_limit": b.monthly_limit}
+    return {"ok": True, "id": b.id, "monthly_limit": b.monthly_limit, "amount": b.amount}
 
 
 @router.delete("/{budget_id}")

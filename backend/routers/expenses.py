@@ -20,6 +20,9 @@ class ExpenseIn(BaseModel):
     date: str                            # YYYY-MM-DD
     payment_mode: str = "UPI"
     skip_fraud_check: bool = False
+    original_amount: float | None = None
+    original_currency: str | None = "INR"
+    exchange_rate: float | None = 1.0
 
 
 class ExpenseUpdate(BaseModel):
@@ -28,6 +31,9 @@ class ExpenseUpdate(BaseModel):
     amount: float | None = None
     date: str | None = None
     payment_mode: str | None = None
+    original_amount: float | None = None
+    original_currency: str | None = None
+    exchange_rate: float | None = None
 
 
 def _parse_date(s: str) -> date:
@@ -73,6 +79,9 @@ def list_expenses(
         "amount": r.amount, "date": r.date.isoformat(), "payment_mode": r.payment_mode,
         "ai_categorized": r.ai_categorized,
         "receipt_id": receipt_map.get(r.id),
+        "original_amount": getattr(r, "original_amount", None),
+        "original_currency": getattr(r, "original_currency", "INR") or "INR",
+        "exchange_rate": getattr(r, "exchange_rate", 1.0) or 1.0,
     } for r in rows]
 
 
@@ -101,6 +110,9 @@ def add_expense(body: ExpenseIn, user: models.User = Depends(authlib.get_current
         user_id=user.id, category=category, description=body.description.strip(),
         amount=body.amount, date=exp_date, payment_mode=body.payment_mode,
         ai_categorized=ai_flag,
+        original_amount=body.original_amount,
+        original_currency=body.original_currency or "INR",
+        exchange_rate=body.exchange_rate or 1.0,
     )
     db.add(exp)
     db.commit()
@@ -110,6 +122,9 @@ def add_expense(body: ExpenseIn, user: models.User = Depends(authlib.get_current
         "amount": exp.amount, "date": exp.date.isoformat(), "payment_mode": exp.payment_mode,
         "ai_categorized": exp.ai_categorized,
         "ai": ai,
+        "original_amount": exp.original_amount,
+        "original_currency": exp.original_currency,
+        "exchange_rate": exp.exchange_rate,
     }
 
 
@@ -128,6 +143,12 @@ def update_expense(expense_id: int, body: ExpenseUpdate, user: models.User = Dep
         exp.date = _parse_date(body.date)
     if body.payment_mode is not None:
         exp.payment_mode = body.payment_mode
+    if body.original_amount is not None:
+        exp.original_amount = body.original_amount
+    if body.original_currency is not None:
+        exp.original_currency = body.original_currency
+    if body.exchange_rate is not None:
+        exp.exchange_rate = body.exchange_rate
     db.commit()
     return {"ok": True}
 

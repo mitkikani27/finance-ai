@@ -104,6 +104,25 @@ class Doc:
         if name in data:
             return _coerce_read(object.__getattribute__(self, "_model"),
                                 name, data[name])
+        # Dual-schema aliases for Atlas collections
+        if name == "monthly_limit" and "amount" in data:
+            return data["amount"]
+        if name == "amount" and "monthly_limit" in data:
+            return data["monthly_limit"]
+        if name == "description" and "title" in data:
+            return data["title"]
+        if name == "title" and "description" in data:
+            return data["description"]
+        if name == "date" and "expense_date" in data:
+            return _coerce_read(object.__getattribute__(self, "_model"), "date", data["expense_date"])
+        if name == "date" and "income_date" in data:
+            return _coerce_read(object.__getattribute__(self, "_model"), "date", data["income_date"])
+        if name == "payment_mode" and "payment_method" in data:
+            return data["payment_method"]
+        if name == "inv_type" and "type" in data:
+            return data["type"]
+        if name == "note" and "notes" in data:
+            return data["notes"]
         if name in object.__getattribute__(self, "_model")._defaults:
             return object.__getattribute__(self, "_model")._defaults[name]
         raise AttributeError(name)
@@ -116,7 +135,33 @@ class Doc:
         for k, v in out.items():
             if isinstance(v, (datetime, date)):
                 out[k] = v.isoformat()
+        # Dual-schema aliases
+        if "monthly_limit" in out and "amount" not in out:
+            out["amount"] = out["monthly_limit"]
+        if "amount" in out and "monthly_limit" not in out:
+            out["monthly_limit"] = out["amount"]
+        if "description" in out and "title" not in out:
+            out["title"] = out["description"]
+        if "date" in out and "expense_date" not in out:
+            out["expense_date"] = out["date"]
+        if "date" in out and "income_date" not in out:
+            out["income_date"] = out["date"]
+        if "payment_mode" in out and "payment_method" not in out:
+            out["payment_method"] = out["payment_mode"]
+        if "inv_type" in out and "type" not in out:
+            out["type"] = out["inv_type"]
+        if "note" in out and "notes" not in out:
+            out["notes"] = out["note"]
         return out
+
+
+def _is_mongo_net_err(e: Exception) -> bool:
+    s = str(e)
+    return any(x in s for x in (
+        "ServerSelectionTimeoutError", "AutoReconnect", "NetworkTimeout",
+        "TLSV1_ALERT_INTERNAL_ERROR", "SSL alert number 80", "SSL handshake failed",
+        "timed out", "connection reset"
+    ))
 
 
 # ── query ───────────────────────────────────────────────────────────────────
@@ -152,13 +197,26 @@ class _Query:
         return cur
 
     def all(self):
-        if self.columns:
-            return [tuple(d.get(c) for c in self.columns)
-                    for d in self._cursor({c: 1 for c in self.columns})]
-        docs = [Doc(self.m, d) for d in self._cursor()]
-        for d in docs:
-            self.s._track(d)
-        return docs
+        try:
+            if self.columns:
+                return [tuple(d.get(c) for c in self.columns)
+                        for d in self._cursor({c: 1 for c in self.columns})]
+            docs = [Doc(self.m, d) for d in self._cursor()]
+            for d in docs:
+                self.s._track(d)
+            return docs
+        except Exception as e:
+            if _is_mongo_net_err(e):
+                from database import failover_to_local
+                failover_to_local(str(e))
+                if self.columns:
+                    return [tuple(d.get(c) for c in self.columns)
+                            for d in self._cursor({c: 1 for c in self.columns})]
+                docs = [Doc(self.m, d) for d in self._cursor()]
+                for d in docs:
+                    self.s._track(d)
+                return docs
+            raise
 
     def first(self):
         self.lim = 1
@@ -166,7 +224,14 @@ class _Query:
         return docs[0] if docs else None
 
     def count(self) -> int:
-        return self.s.db[self.m._col].count_documents(self.q)
+        try:
+            return self.s.db[self.m._col].count_documents(self.q)
+        except Exception as e:
+            if _is_mongo_net_err(e):
+                from database import failover_to_local
+                failover_to_local(str(e))
+                return self.s.db[self.m._col].count_documents(self.q)
+            raise
 
 
 # ── session (unit of work, Mongo edition) ───────────────────────────────────
@@ -181,20 +246,45 @@ class Session:
         self._track(doc)
 
     def flush(self):
+        try:
+            self._flush_internal()
+        except Exception as e:
+            if _is_mongo_net_err(e):
+                from database import failover_to_local
+                failover_to_local(str(e))
+                self._flush_internal()
+            else:
+                raise
+
+    def _flush_internal(self):
         for doc in self._pending:
             m = doc._model
-            data = doc._data
+            # Apply dual-schema aliases on write so documents in Atlas have both conventions
+            data = doc._dump() if hasattr(doc, "_dump") else dict(doc._data)
             if data.get("id") is None:
                 data["id"] = self._next_id(m._col)
+                doc._data["id"] = data["id"]
             for f, default in m._defaults.items():
                 data.setdefault(f, default() if callable(default) else default)
             for k, v in data.items():
                 if isinstance(v, (datetime, date)):
                     data[k] = v.isoformat()
             self.db[m._col].replace_one({"id": data["id"]}, data, upsert=True)
+            doc._data.update(data)
         self._pending.clear()
 
     def commit(self):
+        try:
+            self._commit_internal()
+        except Exception as e:
+            if _is_mongo_net_err(e):
+                from database import failover_to_local
+                failover_to_local(str(e))
+                self._commit_internal()
+            else:
+                raise
+
+    def _commit_internal(self):
         self.flush()
         for doc in self._tracked.values():
             if doc._data.get("id") is not None:
@@ -209,22 +299,48 @@ class Session:
             self._deletes.append((doc._model._col, doc._data["id"]))
 
     def refresh(self, doc):
-        fresh = self.db[doc._model._col].find_one({"id": doc._data.get("id")})
+        try:
+            fresh = self.db[doc._model._col].find_one({"id": doc._data.get("id")})
+        except Exception as e:
+            if _is_mongo_net_err(e):
+                from database import failover_to_local
+                failover_to_local(str(e))
+                fresh = self.db[doc._model._col].find_one({"id": doc._data.get("id")})
+            else:
+                raise
         if fresh:
             doc._data.update(fresh)
 
     def _next_id(self, col: str) -> int:
-        r = self.db.counters.find_one_and_update(
-            {"_id": col}, {"$inc": {"seq": 1}}, upsert=True,
-            return_document=True)
-        return int(r["seq"])
+        try:
+            r = self.db.counters.find_one_and_update(
+                {"_id": col}, {"$inc": {"seq": 1}}, upsert=True,
+                return_document=True)
+            return int(r["seq"])
+        except Exception as e:
+            if _is_mongo_net_err(e):
+                from database import failover_to_local
+                failover_to_local(str(e))
+                r = self.db.counters.find_one_and_update(
+                    {"_id": col}, {"$inc": {"seq": 1}}, upsert=True,
+                    return_document=True)
+                return int(r["seq"])
+            raise
 
     def _track(self, doc):
         self._tracked[id(doc)] = doc
 
     # -- reads ----------------------------------------------------------------
     def get(self, model, doc_id):
-        d = self.db[model._col].find_one({"id": doc_id})
+        try:
+            d = self.db[model._col].find_one({"id": doc_id})
+        except Exception as e:
+            if _is_mongo_net_err(e):
+                from database import failover_to_local
+                failover_to_local(str(e))
+                d = self.db[model._col].find_one({"id": doc_id})
+            else:
+                raise
         if not d:
             return None
         doc = Doc(model, d)
@@ -268,6 +384,35 @@ class _Model:
         for f in self._fields:
             if f in kw:
                 data[f] = kw[f]
+        # Dual-schema aliases on init
+        if "amount" in kw and "monthly_limit" not in data:
+            data["monthly_limit"] = kw["amount"]
+        if "monthly_limit" in kw and "amount" not in data:
+            data["amount"] = kw["monthly_limit"]
+        if "title" in kw and "description" not in data:
+            data["description"] = kw["title"]
+        if "description" in kw and "title" not in data:
+            data["title"] = kw["description"]
+        if "expense_date" in kw and "date" not in data:
+            data["date"] = kw["expense_date"]
+        if "income_date" in kw and "date" not in data:
+            data["date"] = kw["income_date"]
+        if "payment_method" in kw and "payment_mode" not in data:
+            data["payment_mode"] = kw["payment_method"]
+        if "payment_mode" in kw and "payment_method" not in data:
+            data["payment_method"] = kw["payment_mode"]
+        if "type" in kw and "inv_type" not in data:
+            data["inv_type"] = kw["type"]
+        if "inv_type" in kw and "type" not in data:
+            data["type"] = kw["inv_type"]
+        if "notes" in kw and "note" not in data:
+            data["note"] = kw["notes"]
+        if "note" in kw and "notes" not in data:
+            data["notes"] = kw["note"]
+        # Also copy anything extra passed in kw
+        for k, v in kw.items():
+            if k not in data:
+                data[k] = v
         object.__setattr__(self, "_model", type(self))
         object.__setattr__(self, "_data", data)
 
@@ -281,6 +426,31 @@ class _Model:
         if name in data:
             return _coerce_read(object.__getattribute__(self, "_model"),
                                 name, data[name])
+        # Dual-schema aliases
+        if name == "monthly_limit" and "amount" in data:
+            return data["amount"]
+        if name == "amount" and "monthly_limit" in data:
+            return data["monthly_limit"]
+        if name == "description" and "title" in data:
+            return data["title"]
+        if name == "title" and "description" in data:
+            return data["description"]
+        if name == "date" and "expense_date" in data:
+            return _coerce_read(object.__getattribute__(self, "_model"), "date", data["expense_date"])
+        if name == "date" and "income_date" in data:
+            return _coerce_read(object.__getattribute__(self, "_model"), "date", data["income_date"])
+        if name == "payment_mode" and "payment_method" in data:
+            return data["payment_method"]
+        if name == "payment_method" and "payment_mode" in data:
+            return data["payment_mode"]
+        if name == "inv_type" and "type" in data:
+            return data["type"]
+        if name == "type" and "inv_type" in data:
+            return data["inv_type"]
+        if name == "note" and "notes" in data:
+            return data["notes"]
+        if name == "notes" and "note" in data:
+            return data["note"]
         d = object.__getattribute__(self, "_defaults")
         if name in d:
             v = d[name]
@@ -298,6 +468,30 @@ class _Model:
         for k, v in out.items():
             if isinstance(v, (datetime, date)):
                 out[k] = v.isoformat()
+        if "monthly_limit" in out and "amount" not in out:
+            out["amount"] = out["monthly_limit"]
+        if "amount" in out and "monthly_limit" not in out:
+            out["monthly_limit"] = out["amount"]
+        if "description" in out and "title" not in out:
+            out["title"] = out["description"]
+        if "title" in out and "description" not in out:
+            out["description"] = out["title"]
+        if "date" in out and "expense_date" not in out:
+            out["expense_date"] = out["date"]
+        if "date" in out and "income_date" not in out:
+            out["income_date"] = out["date"]
+        if "payment_mode" in out and "payment_method" not in out:
+            out["payment_method"] = out["payment_mode"]
+        if "payment_method" in out and "payment_mode" not in out:
+            out["payment_mode"] = out["payment_method"]
+        if "inv_type" in out and "type" not in out:
+            out["type"] = out["inv_type"]
+        if "type" in out and "inv_type" not in out:
+            out["inv_type"] = out["type"]
+        if "note" in out and "notes" not in out:
+            out["notes"] = out["note"]
+        if "notes" in out and "note" not in out:
+            out["note"] = out["notes"]
         return out
 
 
@@ -315,7 +509,7 @@ class User(_Model):
 
 
 class Income(_Model):
-    _col = "income"
+    _col = "incomes"
     _dates = ("date",)
     _fields = ("id", "user_id", "source", "amount", "date", "note", "created_at")
     _defaults = {"source": "Salary", "note": "",
@@ -326,8 +520,10 @@ class Expense(_Model):
     _col = "expenses"
     _dates = ("date",)
     _fields = ("id", "user_id", "category", "description", "amount", "date",
-               "payment_mode", "ai_categorized", "created_at")
+               "payment_mode", "ai_categorized", "original_amount", "original_currency",
+               "exchange_rate", "created_at")
     _defaults = {"description": "", "payment_mode": "UPI", "ai_categorized": False,
+                 "original_amount": None, "original_currency": "INR", "exchange_rate": 1.0,
                  "created_at": lambda: datetime.utcnow().isoformat()}
 
 
@@ -339,11 +535,27 @@ class Budget(_Model):
 
 class Investment(_Model):
     _col = "investments"
-    _dates = ("start_date",)
+    _dates = ("start_date", "last_sip_date")
     _fields = ("id", "user_id", "name", "inv_type", "amount", "monthly_inflow",
-               "expected_return", "start_date", "note", "created_at")
+               "expected_return", "start_date", "last_sip_date", "note", "created_at")
     _defaults = {"inv_type": "Mutual Fund", "monthly_inflow": 0, "expected_return": 12.0,
-                 "note": "", "created_at": lambda: datetime.utcnow().isoformat()}
+                 "last_sip_date": None, "note": "", "created_at": lambda: datetime.utcnow().isoformat()}
+
+
+class Transaction(_Model):
+    _col = "transactions"
+    _dates = ("date",)
+    _fields = ("id", "user_id", "type", "category", "amount", "date", "description",
+               "payment_method", "created_at")
+    _defaults = {"type": "expense", "category": "General", "payment_method": "UPI",
+                 "created_at": lambda: datetime.utcnow().isoformat()}
+
+
+class Saving(_Model):
+    _col = "savings"
+    _dates = ("date",)
+    _fields = ("id", "user_id", "title", "target_amount", "current_amount", "date", "created_at")
+    _defaults = {"current_amount": 0, "created_at": lambda: datetime.utcnow().isoformat()}
 
 
 class FraudAlert(_Model):
@@ -371,9 +583,11 @@ class OCRReceipt(_Model):
     _col = "ocr_receipts"
     _dates = ("rdate",)
     _fields = ("id", "user_id", "filename", "shop", "amount", "tax", "rdate",
-               "raw_text", "expense_id", "created_at")
+               "raw_text", "expense_id", "original_amount", "original_currency",
+               "exchange_rate", "created_at")
     _defaults = {"filename": "", "shop": "", "amount": 0, "tax": 0, "rdate": None,
-                 "raw_text": "", "expense_id": None,
+                 "raw_text": "", "expense_id": None, "original_amount": None,
+                 "original_currency": "INR", "exchange_rate": 1.0,
                  "created_at": lambda: datetime.utcnow().isoformat()}
 
 
@@ -386,14 +600,43 @@ class Goal(_Model):
                  "created_at": lambda: datetime.utcnow().isoformat()}
 
 
-for _cls in (User, Income, Expense, Budget, Investment, FraudAlert,
-             Notification, ChatHistory, OCRReceipt, Goal):
+for _cls in (User, Income, Expense, Budget, Investment, Transaction, Saving,
+             FraudAlert, Notification, ChatHistory, OCRReceipt, Goal):
     _bind(_cls)
 
 
 def ensure_indexes():
     """ helpful indexes (users.email unique for login integrity)."""
-    db.users.create_index([("email", 1)], unique=True)
-    db.expenses.create_index([("user_id", 1), ("date", -1)])
-    db.income.create_index([("user_id", 1), ("date", -1)])
-    db.chat_history.create_index([("user_id", 1), ("id", -1)])
+    try:
+        db.users.create_index([("email", 1)], unique=True)
+    except Exception:
+        pass
+    try:
+        db.expenses.create_index([("user_id", 1), ("date", -1)])
+    except Exception:
+        pass
+    try:
+        db.incomes.create_index([("user_id", 1), ("date", -1)])
+    except Exception:
+        pass
+    try:
+        db.budgets.create_index([("user_id", 1), ("category", 1)])
+    except Exception:
+        pass
+    try:
+        db.investments.create_index([("user_id", 1)])
+    except Exception:
+        pass
+    try:
+        db.chat_history.create_index([("user_id", 1), ("id", -1)])
+    except Exception:
+        pass
+    # Auto-migrate legacy 'income' (singular) to 'incomes' (plural) if needed
+    try:
+        if "income" in db.list_collection_names():
+            if db.income.count_documents({}) > 0 and db.incomes.count_documents({}) == 0:
+                docs = list(db.income.find())
+                if docs:
+                    db.incomes.insert_many(docs)
+    except Exception:
+        pass

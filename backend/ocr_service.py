@@ -13,6 +13,8 @@ from datetime import datetime
 from pathlib import Path
 from PIL import Image, ImageOps
 
+from currency_service import convert_receipt_currency, detect_currency, get_rate
+
 # ── Tesseract fallback setup ──────────────────────────────────────────────────
 
 def _find_tesseract() -> str | None:
@@ -68,20 +70,24 @@ def _extract_with_gemini(img: Image.Image) -> dict | None:
         client = genai.Client(api_key=api_key)
 
         prompt = (
-            "You are an expert AI Receipt and Invoice scanner.\n"
+            "You are an expert AI Receipt and Invoice scanner with multi-currency intelligence.\n"
             "Analyze this receipt image and extract the exact details as valid JSON.\n"
+            "IMPORTANT CURRENCY DETECTION:\n"
+            "- Carefully inspect currency symbols: '$' (USD), '€' (EUR), '£' (GBP), '₹' or 'Rs' (INR), 'AED', 'C$', 'A$', etc.\n"
+            "- If the symbol is '$' or the store/address is in USA/Canada/foreign, set currency to 'USD' or appropriate code.\n"
+            "- If the receipt is in Dollar, extract the exact dollar amount.\n"
             "Return ONLY a single valid JSON object with these exact keys:\n"
             "{\n"
             '  "shop": "Store / merchant / restaurant name",\n'
-            '  "amount": 0.0, // grand total payable amount as a pure number (no currency symbols)\n'
-            '  "tax": 0.0, // GST, CGST+SGST, VAT or sales tax as a pure number (0.0 if not found)\n'
+            '  "amount": 0.0, // grand total payable in original receipt currency as a pure number\n'
+            '  "currency": "USD", // detected currency: USD, EUR, GBP, AED, CAD, AUD, SGD, SAR, JPY, INR\n'
+            '  "tax": 0.0, // tax / VAT / GST in original receipt currency\n'
             '  "date": "YYYY-MM-DD", // date of transaction (or today if not readable)\n'
             '  "category": "Food", // choose best from: Food, Groceries, Fuel, Rent, EMI, Medical, Transport, Entertainment, Shopping, Utilities, Education, Travel, Other\n'
             '  "payment_mode": "Card", // choose best from: UPI, Card, Cash, NetBanking, Other\n'
-            '  "items": [ // list of items purchased\n'
+            '  "items": [\n'
             '     {"name": "Item Name", "qty": 1, "price": 10.0}\n'
             '  ],\n'
-            '  "currency": "INR", // INR, USD, EUR, etc.\n'
             '  "raw_text_preview": "Short summary of the receipt items and details"\n'
             "}\n"
             "Rules:\n"
@@ -142,16 +148,37 @@ def _extract_with_gemini(img: Image.Image) -> dict | None:
         if category not in valid_cats:
             category = "Shopping"
 
+        raw_curr = (data.get("currency") or "INR").upper().strip()
+        conv = convert_receipt_currency(amt, tax, raw_curr)
+
+        # Convert line items
+        items = []
+        for itm in data.get("items") or []:
+            p = float(itm.get("price") or 0)
+            items.append({
+                "name": itm.get("name") or "Item",
+                "qty": itm.get("qty") or 1,
+                "price": round(p * conv["exchange_rate"], 2),
+                "original_price": round(p, 2),
+            })
+
         return {
             "shop": data.get("shop") or "Receipt",
-            "amount": round(float(amt), 2),
-            "tax": round(float(tax), 2),
+            "amount": conv["amount"],  # Converted to INR for ledger consistency
+            "tax": conv["tax"],        # Converted to INR
+            "original_amount": conv["original_amount"],
+            "original_tax": conv["original_tax"],
+            "original_currency": conv["original_currency"],
+            "currency_symbol": conv["currency_symbol"],
+            "exchange_rate": conv["exchange_rate"],
+            "is_foreign_currency": conv["is_foreign_currency"],
+            "conversion_summary": conv["conversion_summary"],
             "date": rdate,
             "category": category,
             "payment_mode": data.get("payment_mode") or "Card",
-            "items": data.get("items") or [],
-            "currency": data.get("currency") or "INR",
-            "raw_text_preview": data.get("raw_text_preview") or f"{data.get('shop')} - ₹{amt}",
+            "items": items,
+            "currency": "INR",
+            "raw_text_preview": data.get("raw_text_preview") or f"{data.get('shop')} - {conv['conversion_summary']}",
             "confidence": 0.98,
             "method": "ai_vision",
         }
@@ -245,10 +272,21 @@ def _extract_with_tesseract(image_bytes: bytes) -> dict:
     amt = _clean_num(amount_raw) if amount_raw else 0.0
     tax = _clean_num(tax_raw) if tax_raw else 0.0
 
+    # Auto-detect currency ($ / USD / EUR / GBP / INR)
+    detected_curr, symbol = detect_currency(text)
+    conv = convert_receipt_currency(amt, tax, detected_curr)
+
     return {
         "shop": shop,
-        "amount": round(amt, 2),
-        "tax": round(tax, 2),
+        "amount": conv["amount"],  # Converted to INR
+        "tax": conv["tax"],        # Converted to INR
+        "original_amount": conv["original_amount"],
+        "original_tax": conv["original_tax"],
+        "original_currency": conv["original_currency"],
+        "currency_symbol": conv["currency_symbol"],
+        "exchange_rate": conv["exchange_rate"],
+        "is_foreign_currency": conv["is_foreign_currency"],
+        "conversion_summary": conv["conversion_summary"],
         "date": final_date,
         "category": "Shopping",
         "payment_mode": "Card",

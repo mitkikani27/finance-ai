@@ -15,13 +15,13 @@ from pathlib import Path
 SMTP_DEFAULTS = {
     "SMTP_HOST": "smtp.gmail.com",
     "SMTP_PORT": "587",
-    "SMTP_USER": "you@gmail.com",
+    "SMTP_USER": "finmateai1@gmail.com",
     "SMTP_PASSWORD": "your-app-password",
-    "SMTP_FROM": "you@gmail.com",
+    "SMTP_FROM": "finmateai1@gmail.com",
     "SMTP_TLS": "1",
 }
 
-PLACEHOLDER_USERS = {"", "you@gmail.com", "your-app-password"}
+PLACEHOLDER_USERS = {"", "you@gmail.com", "your-app-password", "your-16-digit-app-password"}
 
 SENT_DIR = Path(__file__).resolve().parent / "sent_emails"
 SENT_DIR.mkdir(exist_ok=True)
@@ -37,7 +37,7 @@ def _load_env_file() -> None:
             continue
         k, _, v = line.partition("=")
         k, v = k.strip(), v.strip().strip('"').strip("'")
-        if k and k not in os.environ:
+        if k:
             os.environ[k] = v
 
 
@@ -45,6 +45,7 @@ _load_env_file()
 
 
 def _smtp(key: str) -> str:
+    _load_env_file()
     return (os.getenv(key) or SMTP_DEFAULTS.get(key) or "").strip()
 
 

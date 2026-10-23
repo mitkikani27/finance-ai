@@ -98,14 +98,21 @@ export default function Expenses() {
                   <td className="max-w-64 truncate">{r.description || "—"}</td>
                   <td className="muted">{r.payment_mode}</td>
                   <td className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      {r.receipt_id && (
-                        <a href={`/api/ocr/image/${r.receipt_id}?_auth=${encodeURIComponent(localStorage.getItem("finmate_token") || "")}`}
-                           target="_blank" rel="noreferrer" title="Receipt image dekho"
-                           className="rounded px-1.5 py-0.5 text-[11px]"
-                           style={{ background: "var(--bg-soft)", border: "1px solid var(--border)" }}>🧾</a>
+                    <div className="flex flex-col items-end">
+                      <div className="flex items-center justify-end gap-2">
+                        {r.receipt_id && (
+                          <a href={`/api/ocr/image/${r.receipt_id}?_auth=${encodeURIComponent(localStorage.getItem("finmate_token") || "")}`}
+                             target="_blank" rel="noreferrer" title="Receipt image dekho"
+                             className="rounded px-1.5 py-0.5 text-[11px]"
+                             style={{ background: "var(--bg-soft)", border: "1px solid var(--border)" }}>🧾</a>
+                        )}
+                        <span className="mono font-semibold">−{inr(r.amount, { decimals: 2 })}</span>
+                      </div>
+                      {r.original_currency && r.original_currency !== "INR" && r.original_amount && (
+                        <span className="text-[10.5px] text-emerald-400 font-mono mt-0.5" title={`Auto-converted at ₹${r.exchange_rate}/unit`}>
+                          ({r.original_currency === "USD" ? "$" : r.original_currency === "EUR" ? "€" : r.original_currency === "GBP" ? "£" : ""}{Number(r.original_amount).toFixed(2)} {r.original_currency})
+                        </span>
                       )}
-                      <span className="mono font-semibold">−{inr(r.amount, { decimals: 2 })}</span>
                     </div>
                   </td>
                   <td className="text-right"><button className="btn btn-sm btn-danger" onClick={() => del(r.id)}>✕</button></td>
