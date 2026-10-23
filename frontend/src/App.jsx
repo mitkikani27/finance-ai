@@ -7,7 +7,6 @@ import Dashboard from "./pages/Dashboard.jsx";
 import Expenses from "./pages/Expenses.jsx";
 import Income from "./pages/Income.jsx";
 import Budget from "./pages/Budget.jsx";
-import Fraud from "./pages/Fraud.jsx";
 import Investments from "./pages/Investments.jsx";
 import Market from "./pages/Market.jsx";
 import Reports from "./pages/Reports.jsx";
@@ -76,7 +75,7 @@ export default function App() {
         <Route path="/expenses" element={<Expenses />} />
         <Route path="/income" element={<Income />} />
         <Route path="/budget" element={<Budget />} />
-        <Route path="/fraud" element={<Fraud />} />
+        <Route path="/fraud" element={<Navigate to="/" replace />} />
         <Route path="/investments" element={<Investments />} />
         <Route path="/market" element={<Market />} />
         <Route path="/reports" element={<Reports />} />

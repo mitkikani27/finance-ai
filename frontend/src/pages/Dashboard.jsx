@@ -185,20 +185,8 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* right column: fraud + bills + health */}
+        {/* right column: bills + health */}
         <div className="space-y-4">
-          {d.fraud_new > 0 && (
-            <Link to="/fraud" className="card fade-up block hover:brightness-110" style={{ borderColor: "var(--danger)" }}>
-              <h3 className="card-title" style={{ color: "var(--danger)" }}>🛡️ {t("fraud_alerts")}</h3>
-              <div className="flex items-center gap-3">
-                <div className="text-3xl">⚠️</div>
-                <div>
-                  <div className="font-bold text-[14px]">{d.fraud_new} suspicious transaction{d.fraud_new > 1 ? "s" : ""}</div>
-                  <div className="muted text-[12px]">Review on the Fraud Shield page →</div>
-                </div>
-              </div>
-            </Link>
-          )}
           <div className="card fade-up">
             <h3 className="card-title">📅 {t("upcoming")}</h3>
             {d.upcoming_bills.length === 0 && <div className="muted text-[12.5px]">No recurring bills detected.</div>}

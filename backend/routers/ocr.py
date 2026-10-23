@@ -81,6 +81,44 @@ async def upload_receipt(file: UploadFile = File(...), user: models.User = Depen
     return result
 
 
+@router.post("/sample")
+def scan_sample(user: models.User = Depends(authlib.get_current_user), db: Session = Depends(get_db)):
+    """Instant test scan using the bundled high-quality sample receipt."""
+    sample_file = UPLOAD_DIR / "receipt_3.jpg"
+    if not sample_file.is_file():
+        raise HTTPException(404, "Sample receipt not found on server")
+    data = sample_file.read_bytes()
+    result = extract_receipt(data)
+    if "error" in result:
+        raise HTTPException(503, result["error"])
+
+    if not result.get("category"):
+        ai = ai_predict(result.get("shop") or "receipt") if result.get("shop") else None
+        result["category"] = ai["category"] if ai else "Food"
+    result["ai_category"] = result["category"]
+
+    rdate_obj = None
+    if result.get("date"):
+        try:
+            rdate_obj = datetime.strptime(result["date"][:10], "%Y-%m-%d").date()
+        except Exception:
+            rdate_obj = datetime.now().date()
+
+    rec = models.OCRReceipt(
+        user_id=user.id, filename="sample_receipt.jpg", shop=result.get("shop", "Fast Food"),
+        amount=result.get("amount", 0.0), tax=result.get("tax", 0.0),
+        rdate=rdate_obj,
+        raw_text=result.get("raw_text_preview", ""),
+    )
+    db.add(rec)
+    db.commit()
+    db.refresh(rec)
+    result["id"] = rec.id
+    result["image_saved"] = _save_image(rec.id, data)
+    result["image_url"] = f"/api/ocr/image/{rec.id}" if result["image_saved"] else None
+    return result
+
+
 @router.get("/image/{receipt_id}")
 def receipt_image(receipt_id: int, user: models.User = Depends(authlib.get_current_user), db: Session = Depends(get_db)):
     """The saved receipt photo (works for <img src> too — cookie/_auth auth)."""

@@ -117,7 +117,7 @@ def _call_llm(prompt: str) -> str | None:
         try:
             from google import genai
             client = genai.Client(api_key=gemini_key)
-            models_to_try = ["gemini-2.5-flash", "gemini-3.5-flash", "gemini-flash-latest", "gemini-3.5-flash-lite"]
+            models_to_try = ["gemini-3.5-flash", "gemini-3-flash-preview", "gemini-2.5-flash", "gemini-flash-latest"]
             for m in models_to_try:
                 try:
                     resp = client.models.generate_content(model=m, contents=prompt)

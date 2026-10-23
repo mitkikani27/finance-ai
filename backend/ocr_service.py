@@ -90,7 +90,7 @@ def _extract_with_gemini(img: Image.Image) -> dict | None:
             "- amount and tax must be numbers, not strings."
         )
 
-        models_to_try = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-flash-latest"]
+        models_to_try = ["gemini-3.5-flash", "gemini-3-flash-preview", "gemini-2.5-flash", "gemini-flash-latest"]
         resp_text = None
         for m in models_to_try:
             try:

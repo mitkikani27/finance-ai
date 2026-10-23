@@ -9,7 +9,6 @@ const NAV = [
   { to: "/expenses", key: "expenses", icon: "💸" },
   { to: "/income", key: "income", icon: "💰" },
   { to: "/budget", key: "budget", icon: "🎯" },
-  { to: "/fraud", key: "fraud", icon: "🛡️" },
   { to: "/investments", key: "investments", icon: "📈" },
   { to: "/market", key: "market", icon: "🔥" },
   { to: "/reports", key: "reports", icon: "📄" },
@@ -102,7 +101,7 @@ export default function Layout() {
                 {notif.slice(0, 5).map((n) => (
                   <div key={n.id} className="px-3 py-2.5 rounded-lg hover:bg-[var(--card-2)] flex justify-between items-start">
                     <div>
-                      <div className="text-[13px] font-semibold">{n.type === "fraud" ? "🛡️ " : "🔔 "}{n.title}</div>
+                      <div className="text-[13px] font-semibold">🔔 {n.title}</div>
                       <div className="text-[12px] muted mt-0.5">{n.body}</div>
                     </div>
                     <button className="muted hover:text-[var(--danger)] text-lg px-2 leading-none" title="Clear" onClick={(e) => {

@@ -97,6 +97,42 @@ export default function OCR() {
       });
   }
 
+  async function onSample() {
+    setSaved(null);
+    setResult(null);
+    setBusy(true);
+    setScanStep(2);
+
+    const stepTimer = setInterval(() => {
+      setScanStep((s) => (s < 3 ? s + 1 : s));
+    }, 800);
+
+    try {
+      const r = await api("/api/ocr/sample", { method: "POST" });
+      setResult(r);
+      if (r.id) {
+        setImg(imgSrc(r.id));
+      }
+      const detectedCat = r.category || r.ai_category || "Food";
+      setForm({
+        shop: r.shop || "Fast Food",
+        amount: r.amount ? String(r.amount) : "52.50",
+        tax: r.tax ? String(r.tax) : "2.50",
+        date: r.date || today(),
+        category: CATEGORIES.includes(detectedCat) ? detectedCat : "Food",
+        payment_mode: r.payment_mode || "Card",
+        description: `Receipt: ${r.shop || "Fast Food"}`,
+      });
+      push("✨ Sample bill auto-scanned by Gemini AI Vision!", "success");
+      loadRecent();
+    } catch (e) {
+      push(e.message || "Sample scan failed", "error");
+    } finally {
+      clearInterval(stepTimer);
+      setBusy(false);
+    }
+  }
+
   async function confirmAdd() {
     if (!result?.id) return;
     const numAmt = parseFloat(form.amount);
@@ -164,7 +200,20 @@ export default function OCR() {
         </div>
 
         {/* Quick action shortcuts */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            className="btn btn-sm"
+            onClick={onSample}
+            disabled={busy}
+            style={{
+              background: "color-mix(in srgb, var(--accent) 15%, transparent)",
+              borderColor: "var(--accent)",
+              color: "var(--accent)",
+            }}
+            title="Fast Food sample receipt scan karke test karein"
+          >
+            ⚡ Try Sample Bill
+          </button>
           <button
             className="btn btn-sm"
             onClick={() => cameraRef.current?.click()}
@@ -324,7 +373,7 @@ export default function OCR() {
                   </div>
                 </div>
 
-                <div className="pt-2 flex justify-center gap-2">
+                <div className="pt-2 flex flex-wrap justify-center gap-2">
                   <button
                     type="button"
                     className="btn btn-sm btn-primary"
@@ -344,6 +393,21 @@ export default function OCR() {
                     }}
                   >
                     📸 Take Photo
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    style={{
+                      background: "color-mix(in srgb, var(--accent) 15%, transparent)",
+                      borderColor: "var(--accent)",
+                      color: "var(--accent)",
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSample();
+                    }}
+                  >
+                    ⚡ Try Sample Bill
                   </button>
                 </div>
               </div>
