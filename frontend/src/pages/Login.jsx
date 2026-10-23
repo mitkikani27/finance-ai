@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useToast } from "../components/Toast.jsx";
-import { CLERK_PK, ClerkGoogleButton, ClerkAuthWrapper } from "../clerk.jsx";
+import { CLERK_PK, ClerkGoogleButton, ClerkBridge } from "../clerk.jsx";
 
 const FEATURES = [
   ["🤖", "AI Expense Categorization", "Swiggy → Food, Amazon → Shopping — automatically"],
@@ -14,7 +14,7 @@ const FEATURES = [
 ];
 
 export default function Login() {
-  const { login, register, exchangeClerk } = useAuth();
+  const { login, register, google, exchangeClerk } = useAuth();
   const { push } = useToast();
   const nav = useNavigate();
   const [tab, setTab] = useState("login");
@@ -43,6 +43,18 @@ export default function Login() {
     } finally { setBusy(false); }
   }
 
+  async function handleGoogleLogin() {
+    setBusy(true);
+    try {
+      await google();
+      go();
+    } catch (err) {
+      push(err.message, "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function clerkAuthenticated(clerkToken, clerkUser) {
     try { 
       const email = clerkUser?.primaryEmailAddress?.emailAddress || "";
@@ -54,8 +66,8 @@ export default function Login() {
   }
 
   return (
-    <ClerkAuthWrapper onAuthenticated={clerkAuthenticated}>
-      <div className="login-hero min-h-full flex">
+    <div className="login-hero min-h-full flex">
+      <ClerkBridge onAuthenticated={clerkAuthenticated} />
         <div className="hidden lg:flex flex-col justify-center px-14 w-[52%] max-w-3xl">
           <div className="flex items-center gap-3 mb-8">
             <div className="w-14 h-14 rounded-2xl grid place-items-center text-3xl"
@@ -116,21 +128,16 @@ export default function Login() {
                 </button>
               </form>
 
-              {CLERK_PK && (
-                <>
-                  <div className="flex items-center gap-3 my-4">
-                    <div className="h-px flex-1" style={{ background: "var(--border)" }} />
-                    <span className="muted text-[11px] font-semibold">OR</span>
-                    <div className="h-px flex-1" style={{ background: "var(--border)" }} />
-                  </div>
-                  <ClerkGoogleButton />
-                </>
-              )}
+              <div className="flex items-center gap-3 my-4">
+                <div className="h-px flex-1" style={{ background: "var(--border)" }} />
+                <span className="muted text-[11px] font-semibold">OR</span>
+                <div className="h-px flex-1" style={{ background: "var(--border)" }} />
+              </div>
+              <ClerkGoogleButton onDirectLogin={handleGoogleLogin} busy={busy} />
             </div>
             <p className="muted text-[11px] text-center mt-4">🔐 JWT-secured · bcrypt passwords</p>
           </div>
         </div>
       </div>
-    </ClerkAuthWrapper>
   );
 }

@@ -14,7 +14,7 @@ const setCookie = (t) => {
   // the cookie survives and get_current_user accepts either.
   document.cookie = t
     ? `finmate_token=${t}; path=/; max-age=2592000; SameSite=Lax`
-    : "finmate_token=; path=/; max-age=0; SameSite=Lax";
+    : "finmate_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0; SameSite=Lax";
 };
 export const storeToken = (t) => {
   memoryToken = t;

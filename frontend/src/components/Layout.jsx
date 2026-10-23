@@ -34,7 +34,10 @@ export default function Layout() {
     api("/api/goals/notifications").then((r) => setNotif(r)).catch(() => {});
   }, []);
 
-  const doLogout = () => { logout(); nav("/login"); };
+  const doLogout = async () => {
+    await logout();
+    nav("/login", { replace: true });
+  };
 
   const sidebar = (
     <div className="flex flex-col h-full">

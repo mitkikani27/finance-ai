@@ -96,7 +96,7 @@ export default function Settings() {
               ))}
             </div>
             <div className="muted text-[12px]">Account: <b className="text-[var(--text)]">{user.email}</b></div>
-            <button className="btn btn-danger w-full" onClick={() => { logout(); nav("/login"); }}>↩ Sign out</button>
+            <button className="btn btn-danger w-full" onClick={async () => { await logout(); nav("/login", { replace: true }); }}>↩ Sign out</button>
           </div>
 
           <div className="card space-y-3">

@@ -180,8 +180,11 @@ def clerk_login(body: ClerkTokenIn, db: Session = Depends(get_db)):
             pass
             
         if profile.get("auth_provider") == "clerk":
-            if profile.get("clerk_sub") and profile.get("clerk_sub") != sub:
-                 raise HTTPException(403, "Email is already linked to a different Clerk account.")
+            if profile.get("clerk_sub") != sub:
+                profile["clerk_sub"] = sub
+                user.profile = json.dumps(profile)
+                db.commit()
+                db.refresh(user)
         else:
             # For simplicity in this demo, allow linking if not explicitly another Clerk account.
             # In true prod, we would enforce OAuth linking strictness.

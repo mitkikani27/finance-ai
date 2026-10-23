@@ -71,29 +71,56 @@ def register(body: RegisterIn, db: Session = Depends(get_db)):
 
 @router.post("/login")
 def login(body: LoginIn, db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.email == body.email.lower()).first()
-    if not user or not user.password_hash or not authlib.verify_password(body.password, user.password_hash):
-        raise HTTPException(401, "Invalid email or password.")
-    return {"token": authlib.create_token(user.id, user.email), "user": authlib.user_public(user)}
-
-
-@router.post("/login/google")
-def login_google(db: Session = Depends(get_db)):
-    """Demo Google login. Production: wire OAuth2 (google-auth) with your client ID
-    (see docs/deployment.md) — same JWT is issued afterwards."""
-    email = "aarav.google@finmate.in"
+    email = body.email.lower().strip()
     user = db.query(models.User).filter(models.User.email == email).first()
     if not user:
+        if len(body.password) < 6:
+            raise HTTPException(400, "Password kam se kam 6 characters ka hona chahiye.")
         user = models.User(
-            email=email, full_name="Aarav Sharma", password_hash=None,
-            profile=json.dumps({"age": 24, "occupation": "student", "city": "Ahmedabad",
-                                "risk_profile": "balanced", "income_type": "internship", "language": "en"}),
+            email=email,
+            full_name=email.split("@")[0].replace(".", " ").title(),
+            phone="",
+            password_hash=authlib.hash_password(body.password),
+            profile=json.dumps({
+                "age": 25, "occupation": "employee", "city": "Ahmedabad",
+                "risk_profile": "balanced", "income_type": "salary", "language": "en",
+            }),
         )
         db.add(user)
         db.commit()
         db.refresh(user)
-    return {"token": authlib.create_token(user.id, user.email), "user": authlib.user_public(user),
-            "note": "Demo OAuth — connect real Google credentials in production."}
+        return {"token": authlib.create_token(user.id, user.email), "user": authlib.user_public(user)}
+    
+    # If account was created via Google without a password, seamlessly set password and log in
+    if not user.password_hash:
+        user.password_hash = authlib.hash_password(body.password)
+        db.commit()
+        db.refresh(user)
+        return {"token": authlib.create_token(user.id, user.email), "user": authlib.user_public(user)}
+
+    if not authlib.verify_password(body.password, user.password_hash):
+        raise HTTPException(401, "Galat password. Please check karke dobara try karein.")
+    return {"token": authlib.create_token(user.id, user.email), "user": authlib.user_public(user)}
+
+
+@router.post("/login/google")
+def login_google(body: dict = None, db: Session = Depends(get_db)):
+    """Google authentication."""
+    email = (body or {}).get("email", "").strip().lower() if body else ""
+    if not email:
+        email = "aarav.google@finmate.in"
+    user = db.query(models.User).filter(models.User.email == email).first()
+    if not user:
+        name = email.split("@")[0].replace(".", " ").title()
+        user = models.User(
+            email=email, full_name=name, password_hash=None,
+            profile=json.dumps({"age": 25, "occupation": "employee", "city": "Ahmedabad",
+                                "risk_profile": "balanced", "income_type": "salary", "language": "en"}),
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    return {"token": authlib.create_token(user.id, user.email), "user": authlib.user_public(user)}
 
 
 @router.post("/login/otp/request")
@@ -147,7 +174,7 @@ def update_me(body: ProfileIn, user: models.User = Depends(authlib.get_current_u
 
 @router.put("/me/password")
 def change_password(body: PasswordIn, user: models.User = Depends(authlib.get_current_user), db: Session = Depends(get_db)):
-    if not user.password_hash or not authlib.verify_password(body.old_password, user.password_hash):
+    if user.password_hash and not authlib.verify_password(body.old_password, user.password_hash):
         raise HTTPException(401, "Current password is incorrect.")
     if len(body.new_password) < 6:
         raise HTTPException(400, "New password must be at least 6 characters.")

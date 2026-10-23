@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { api, getStoredToken, storeToken } from "../api.js";
+import { signOutClerk } from "../clerk.jsx";
 
 const Ctx = createContext(null);
 
@@ -49,7 +50,11 @@ export function AuthProvider({ children }) {
     const r = await api("/api/auth/login/otp/verify", { method: "POST", body: { phone, otp } });
     storeToken(r.token); setUser(r.user); return r.user;
   }, []);
-  const logout = useCallback(() => { storeToken(null); setUser(null); }, []);
+  const logout = useCallback(async () => {
+    storeToken(null);
+    setUser(null);
+    await signOutClerk();
+  }, []);
   const refresh = useCallback(async () => { setUser(await api("/api/auth/me")); }, []);
 
   return <Ctx.Provider value={{ user, setUser, loading, login, register, google, exchangeClerk, otpLogin, logout, refresh }}>{children}</Ctx.Provider>;

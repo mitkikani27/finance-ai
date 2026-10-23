@@ -14,15 +14,14 @@ import Chat from "./pages/Chat.jsx";
 import OCR from "./pages/OCR.jsx";
 import Settings from "./pages/Settings.jsx";
 
-import { ClerkAuthWrapper, ClerkSSOCallback } from "./clerk.jsx";
+import { ClerkBridge, ClerkSSOCallback } from "./clerk.jsx";
 
 function SSOCallbackHandler() {
   const { exchangeClerk } = useAuth();
-  const nav = useNavigate();
   return (
     <div className="h-full grid place-items-center">
       <div className="pulse text-3xl">💰</div>
-      <ClerkAuthWrapper onAuthenticated={async (token, clerkUser) => {
+      <ClerkBridge onAuthenticated={async (token, clerkUser) => {
         try {
           const email = clerkUser?.primaryEmailAddress?.emailAddress || "";
           const name = clerkUser?.fullName || "";
@@ -32,9 +31,8 @@ function SSOCallbackHandler() {
           console.error("SSO callback catch error:", err);
           window.location.href = "/login";
         }
-      }}>
-        <ClerkSSOCallback/>
-      </ClerkAuthWrapper>
+      }} />
+      <ClerkSSOCallback />
     </div>
   );
 }
